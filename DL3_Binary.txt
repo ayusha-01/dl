@@ -1,0 +1,244 @@
+# =========================================================
+# Binary Classification using Deep Neural Networks (IMDB)
+# Movie Review Sentiment Analysis
+# =========================================================
+
+# =========================
+# 1. Import Libraries
+# =========================
+import pandas as pd
+import numpy as np
+import re
+from bs4 import BeautifulSoup
+import matplotlib.pyplot as plt
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.metrics import ConfusionMatrixDisplay
+
+from tensorflow import keras
+from tensorflow.keras import layers
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+
+# =========================
+# 2. Load Dataset
+# =========================
+# Dataset should contain:
+# Column 1 -> review
+# Column 2 -> sentiment
+
+data = pd.read_csv("imdb.csv")
+
+print(data.head())
+print("\nDataset Shape:", data.shape)
+
+
+# =========================
+# 3. Data Cleaning - Strip HTML Tags
+# =========================
+
+def clean_text(text):
+
+    # Remove HTML tags
+    text = BeautifulSoup(text, "html.parser").get_text()
+
+    # Remove special characters
+    text = re.sub(r'[^a-zA-Z]', ' ', text)
+
+    # Convert to lowercase
+    text = text.lower()
+
+    # Remove extra spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
+
+data['review'] = data['review'].apply(clean_text)
+
+print("\nSample Cleaned Review:")
+print(data['review'][0])
+
+
+# =========================
+# 4. Encode Labels and Separate Features
+# =========================
+
+X = data['review']
+
+# positive -> 1
+# negative -> 0
+y = data['sentiment'].map({
+    'positive': 1,
+    'negative': 0
+})
+
+print("\nEncoded Labels:")
+print(y.head())
+
+
+# =========================
+# 5. Tokenize and Pad Text Sequences
+# =========================
+
+# Vocabulary size
+max_words = 10000
+
+# Maximum review length
+max_len = 200
+
+tokenizer = Tokenizer(num_words=max_words)
+
+# Learn vocabulary
+tokenizer.fit_on_texts(X)
+
+# Convert text -> integer sequences
+X_seq = tokenizer.texts_to_sequences(X)
+
+# Pad sequences to same length
+X_pad = pad_sequences(X_seq, maxlen=max_len)
+
+print("\nPadded Sequence Shape:", X_pad.shape)
+
+
+# =========================
+# 6. Split into Training and Testing Sets
+# =========================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_pad,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+print("\nTraining Data Shape:", X_train.shape)
+print("Testing Data Shape:", X_test.shape)
+
+
+# =========================
+# 7. Build the Neural Network Model
+# =========================
+
+model = keras.Sequential([
+
+    # Word Embedding Layer
+    layers.Embedding(input_dim=max_words,
+                     output_dim=128,
+                     input_length=max_len),
+
+    # Flatten output
+    layers.Flatten(),
+
+    # Hidden Dense Layer
+    layers.Dense(64, activation='relu'),
+
+    # Dropout to reduce overfitting
+    layers.Dropout(0.5),
+
+    # Output Layer
+    layers.Dense(1, activation='sigmoid')
+])
+
+print("\nModel Summary:")
+model.summary()
+
+
+# =========================
+# 8. Compile the Model
+# =========================
+
+model.compile(
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=['accuracy']
+)
+
+
+# =========================
+# 9. Train the Model
+# =========================
+
+history = model.fit(
+    X_train,
+    y_train,
+    epochs=5,
+    batch_size=32,
+    validation_split=0.2
+)
+
+
+# =========================
+# 10. Evaluate the Model on Test Data
+# =========================
+
+loss, accuracy = model.evaluate(X_test, y_test)
+
+print("\nTest Loss:", loss)
+print("Test Accuracy:", accuracy)
+
+
+# =========================
+# 11. Plot Training vs Validation Accuracy
+# =========================
+
+plt.figure(figsize=(8,5))
+
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+
+plt.title('Training vs Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.legend()
+
+plt.show()
+
+
+# =========================
+# 12. Plot Training vs Validation Loss
+# =========================
+
+plt.figure(figsize=(8,5))
+
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+
+plt.title('Training vs Validation Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.show()
+
+
+# =========================
+# 13. Confusion Matrix and Classification Report
+# =========================
+
+# Predict probabilities
+y_pred_prob = model.predict(X_test)
+
+# Convert probabilities -> class labels
+y_pred = (y_pred_prob > 0.5).astype("int32")
+
+# Confusion Matrix
+cm = confusion_matrix(y_test, y_pred)
+
+print("\nConfusion Matrix:")
+print(cm)
+
+# Display Confusion Matrix
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot(cmap='Blues')
+
+plt.title("Confusion Matrix")
+plt.show()
+
+
+# Classification Report
+print("\nClassification Report:\n")
+
+print(classification_report(y_test, y_pred))

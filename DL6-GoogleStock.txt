@@ -1,0 +1,108 @@
+# Step 1: Imports
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+
+# Step 2: Load dataset
+df = pd.read_csv("Google_Stock_Price.csv")
+
+print(df.head())
+print(df.columns)   # optional (to verify column names)
+
+# Step 3: Use 'open' column (FIXED)
+prices = df['open'].values.reshape(-1,1)
+
+# Step 4: Normalize
+scaler = MinMaxScaler()
+prices = scaler.fit_transform(prices)
+
+# Step 5: Create sequences
+X, y = [], []
+for i in range(60, len(prices)):
+    X.append(prices[i-60:i])
+    y.append(prices[i])
+
+X, y = np.array(X), np.array(y)
+
+# Step 6: Train-Test split
+split = int(0.8 * len(X))
+X_train, X_test = X[:split], X[split:]
+y_train, y_test = y[:split], y[split:]
+
+# Step 7: Model (LSTM)
+model = Sequential([
+    LSTM(50, input_shape=(X.shape[1], 1)),
+    Dense(1)
+])
+
+# Step 8: Compile
+model.compile(optimizer='adam', loss='mse')
+
+# Step 9: Train
+history = model.fit(X_train, y_train, epochs=5, batch_size=32)
+
+# Step 10: Predict
+predicted = model.predict(X_test)
+
+# Step 11: Inverse scaling
+predicted = scaler.inverse_transform(predicted)
+y_test_actual = scaler.inverse_transform(y_test)
+
+# Step 12: Best Graph (Actual vs Predicted)
+plt.plot(y_test_actual, label='Actual Price')
+plt.plot(predicted, label='Predicted Price')
+plt.legend()
+plt.title("Stock Price Prediction")
+plt.xlabel("Time")
+plt.ylabel("Price")
+plt.show()
+
+# Step 13: Evaluation
+rmse = np.sqrt(mean_squared_error(y_test_actual, predicted))
+mae = mean_absolute_error(y_test_actual, predicted)
+
+print("RMSE:", rmse)
+print("MAE:", mae)
+
+##################################
+##################################
+#prediction
+
+n_future = 30  # number of future days to predict
+
+# Seed the forecast with the last TIME_STEPS days of known data
+future_input       = data_scaled[-TIME_STEPS:].reshape(1, TIME_STEPS, 1)
+future_predictions = []
+
+for _ in range(n_future):
+    pred = model.predict(future_input, verbose=0)
+    future_predictions.append(pred[0, 0])
+    # Slide the window: drop oldest day, append new prediction
+    future_input = np.append(future_input[:, 1:, :], pred.reshape(1, 1, 1), axis=1)
+
+# Inverse scale forecasted prices back to USD
+future_prices = scaler.inverse_transform(np.array(future_predictions).reshape(-1, 1))
+
+# Generate business day dates starting from the day after last known date
+last_date    = df.index[-1]
+future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_future, freq='B')
+
+plt.figure(figsize=(16, 6))
+plt.plot(df.index[-120:], scaler.inverse_transform(data_scaled[-120:]),
+         label='Historical', color='steelblue', linewidth=1.5)
+plt.plot(future_dates, future_prices,
+         label='30-Day Forecast', color='orange', linewidth=1.5)
+plt.axvline(x=last_date, color='gray', linestyle='--', label='Forecast Start')
+plt.title('Google Stock — 30-Day Future Price Forecast (RNN)')
+plt.xlabel('Date')
+plt.ylabel('Price (USD)')
+plt.legend()
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+print(f"\nForecasted price range: {future_prices.min():.2f} USD - {future_prices.max():.2f} USD")
